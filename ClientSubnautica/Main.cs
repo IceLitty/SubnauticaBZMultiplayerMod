@@ -1,29 +1,32 @@
-﻿using ClientSubnautica.MultiplayerManager;
-using HarmonyLib;
-using QModManager.API.ModLoading;
-using QModManager.Utility;
+﻿using HarmonyLib;
 using System;
 using System.Reflection;
 using Newtonsoft.Json.Linq;
 using System.IO;
 using System.Diagnostics;
 using System.Collections.Generic;
+using BepInEx.Logging;
+using BepInEx;
 
 namespace ClientSubnautica
 {
-    [QModCore]
-    public static class MainPatcher
+    [BepInPlugin(mod_guid, mod_name, version_string)]
+    public class MainPatcher : BaseUnityPlugin
     {
+        private const string mod_guid = "sbzmultiplayer";
+        private const string mod_name = "SBZ Multiplayer Mod";
+        private const string version_string = "1.0";
         public static string location;
         public static string modFolder;
         public static string id;
         public static string username;
         public static JObject configFile;
         public static Dictionary<string, string> player_list = new Dictionary<string, string>();
+        public static ManualLogSource logger;
 
-        [QModPatch]
-        public static void Patch()
+        private void Awake()
         {
+            logger = Logger;
             location = AppDomain.CurrentDomain.BaseDirectory;
             modFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
             // Loading the user configs.
@@ -36,7 +39,7 @@ namespace ClientSubnautica
             string text = "dam_" + executingAssembly.GetName().Name;
             new Harmony(text).PatchAll(executingAssembly);
 
-            Logger.Log(Logger.Level.Info, playerID + " - Username: " + username);
+            Logger.LogInfo(playerID + " - Username: " + username);
         }
         /// <summary>
         /// Loads a JSON file and parse it, if none is found, one is created. NOT UNIVERSAL.

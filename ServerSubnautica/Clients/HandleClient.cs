@@ -23,6 +23,8 @@ namespace ServerSubnautica
         } 
         public void initialize()
         {
+            Server.RefreshLoadSaves();
+
             int bufferSize = 1024;
 
             byte[] dataLength = BitConverter.GetBytes(Server.mapBytes.Length);
@@ -44,7 +46,7 @@ namespace ServerSubnautica
 
             string session = Server.gameInfo["session"].ToString();
             string changeSet = Server.gameInfo["changeSet"].ToString();
-            string gameMode = Server.gameInfo["gameMode"].ToString();
+            string gameMode = Server.gameInfo["gameModePresetId"].ToString();
             string storyVersion = Server.gameInfo["storyVersion"].ToString();
 
             byte[] test2 = Encoding.ASCII.GetBytes(session + "$" + changeSet + "$" + gameMode + "$" + storyVersion);

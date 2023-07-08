@@ -46,18 +46,8 @@ class Server
         mapName = configParams["MapFolderName"].ToString();
         gameInfoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, mapName, "gameinfo.json");
         mapPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, mapName + ".zip");
-        if (!zipFile(mapName))
-        {
-            Console.WriteLine("Can't compress world");
-            Console.WriteLine("Press a key...");
-            Console.ReadKey();
-            Environment.Exit(1);
-        }
         gameInfo = server.LoadParam(gameInfoPath);
-
-        mapBytes = getFileBytes(mapPath);
-
-        File.Delete(mapPath);
+        RefreshLoadSaves();
 
         string ipAddress = configParams["ipAddress"].ToString();
         int port = int.Parse(configParams["port"].ToString());
@@ -69,50 +59,98 @@ class Server
 
         while (true)
         {
-            TcpClient client = ServerSocket.AcceptTcpClient();
-            
-            // System to receive the ID
-            string id = "";
-            string username = "";
-            byte[] buffer = new byte[1024];
-            int byte_count;
-            byte_count = client.GetStream().Read(buffer, 0, buffer.Length);
-            string data = Encoding.ASCII.GetString(buffer, 0, byte_count);
-            if (!data.Contains("/END/"))
-                continue;
-            // Split the greaaaat stream into commands
-            string[] commands = data.Split(new string[] { "/END/" }, StringSplitOptions.None);
-            foreach(string command in commands)
+            try
             {
-                if (command.Length <= 1)
+                TcpClient client = ServerSocket.AcceptTcpClient();
+
+                // System to receive the ID
+                string id = "";
+                string username = "";
+                byte[] buffer = new byte[1024];
+                int byte_count;
+                byte_count = client.GetStream().Read(buffer, 0, buffer.Length);
+                string data = Encoding.ASCII.GetString(buffer, 0, byte_count);
+                if (!data.Contains("/END/"))
                     continue;
-                // Try to see if this command contains an ID
-                try
+                // Split the greaaaat stream into commands
+                string[] commands = data.Split(new string[] { "/END/" }, StringSplitOptions.None);
+                foreach (string command in commands)
                 {
-                    string idCMD = command.Split(':')[0]; // A command looks like this globally: "9:6486198964615684:/END/" that's the scheme
-                    if(idCMD == NetworkCMD.getIdCMD("ReceivingID")) // Check if the command type is the one to receive an ID.
+                    if (command.Length <= 1)
+                        continue;
+                    // Try to see if this command contains an ID
+                    try
                     {
-                        id = command.Split(':')[1]; // If yes, then as we can see the id is just after 9: so [1].
-                        username = command.Split(":")[2]; //
-                        Console.WriteLine($"Server received a new ID from an entering connection: {id} with name {username}");
-                        break;
-                    } else
-                    {
-                        new ClientMethod().redirectCall(command.Split(":"), command.Split(":")[1]);
+                        string idCMD = command.Split(':')[0]; // A command looks like this globally: "9:6486198964615684:/END/" that's the scheme
+                        if (idCMD == NetworkCMD.getIdCMD("ReceivingID")) // Check if the command type is the one to receive an ID.
+                        {
+                            id = command.Split(':')[1]; // If yes, then as we can see the id is just after 9: so [1].
+                            username = command.Split(":")[2]; //
+                            Console.WriteLine($"Server received a new ID from an entering connection: {id} with name {username}");
+                            break;
+                        }
+                        else
+                        {
+                            new ClientMethod().redirectCall(command.Split(":"), command.Split(":")[1]);
+                        }
                     }
-                } catch (Exception e)
-                {
-                    throw new Exception(e.Message, e);
+                    catch (Exception e)
+                    {
+                        throw new Exception(e.Message, e);
+                    }
                 }
+                // This adds the new client and its ID to the list, now that ID have been defined higher.
+                lock (_lock)
+                {
+                    if (list_clients.ContainsKey(id))
+                    {
+                        TcpClient oldClient;
+                        if (list_clients.TryGetValue(id, out oldClient))
+                        {
+                            try
+                            {
+                                oldClient.Close();
+                            }
+                            catch (Exception e)
+                            {
+                                Console.WriteLine("Re-entering id:" + id + " Error when close old TcpClient, ignoring.");
+                            }
+                        }
+                        list_clients.Remove(id);
+                    }
+                    list_clients.Add(id, client);
+                    if (list_nicknames.ContainsKey(id))
+                    {
+                        list_nicknames.Remove(id);
+                    }
+                    list_nicknames.Add(id, username);
+                }
+                Console.WriteLine($"Someone connected, id: {id}, username: {username}");
+
+                Thread receiveThread = new Thread(new HandleClient(id).start);
+                receiveThread.Start();
+                Thread.Sleep(5);
             }
-            lock (_lock) list_clients.Add(id, client); // This adds the new client and its ID to the list, now that ID have been defined higher.
-            lock (_lock) list_nicknames.Add(id, username);
-            Console.WriteLine($"Someone connected, id: {id}, username: {username}");
-            
-            Thread receiveThread = new Thread(new HandleClient(id).start);
-            receiveThread.Start();
-            Thread.Sleep(5);
+            catch (Exception e)
+            {
+                Console.WriteLine("Receive package error:");
+                Console.WriteLine(e);
+            }
         }
+    }
+
+    public static void RefreshLoadSaves()
+    {
+        if (!zipFile(mapName))
+        {
+            Console.WriteLine("Can't compress world");
+            Console.WriteLine("Press a key...");
+            Console.ReadKey();
+            Environment.Exit(1);
+        }
+        mapBytes = getFileBytes(mapPath);
+        Console.WriteLine("Load save data, length: " + mapBytes.Length);
+        File.Delete(mapPath);
     }
 
     public JObject LoadParam(string path)
